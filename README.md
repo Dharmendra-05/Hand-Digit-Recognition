@@ -143,3 +143,11 @@ When running inference on a sample digit (e.g. digit `4`), the pipeline produces
 2. A highlighted keypad button matching the prediction (`[0] [1] [2] [3] [*4*] [5] [6] [7] [8] [9]`).
 3. An arrow directly connecting the digit to the detected class.
 4. A full probability confidence distribution bar chart indicating prediction certainty (>97%).
+
+---
+
+## 📄 License & Community
+
+* **License**: Released under the [MIT License](LICENSE).
+* **Code of Conduct**: Please review our [Code of Conduct](CODE_OF_CONDUCT.md).
+* **Contributing**: Check out our [Contributing Guidelines](CONTRIBUTING.md) to get involved.
