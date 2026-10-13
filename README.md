@@ -82,7 +82,8 @@ Evaluated using 5-Fold Stratified Cross-Validation and held-out test splits:
 
 ```
 Hand-Digit-Recognition/
-├── handwritten_digit_recognition.ipynb  # Primary interactive Jupyter Notebook (Executed with all outputs)
+├── handwritten_digit_recognition.ipynb  # Notebook 1: Ideal Benchmark (Scikit-Learn & UCI PenDigits)
+├── custom_handwritten_trials.ipynb      # Notebook 2: Real-World Custom Trials (Evaluates self.jpeg & samples)
 ├── requirements.txt                     # Project dependencies
 ├── README.md                            # Comprehensive documentation & findings
 ├── LICENSE                              # MIT License
@@ -114,7 +115,8 @@ Hand-Digit-Recognition/
 │   ├── run_benchmark.py                 # Full benchmark training & evaluation suite
 │   ├── evaluate_trial_1.py              # Real-world Trial 1 multi-digit evaluator
 │   ├── predict_single_image.py          # Single image inference CLI tool
-│   └── generate_notebook.py             # Notebook regeneration & execution script
+│   ├── generate_notebook.py             # Benchmark notebook generator & executor
+│   └── generate_trials_notebook.py      # Custom trials notebook generator & executor
 │
 └── models/                              # Serialized model & scaler joblib artifacts
     ├── best_digits_svm_model.joblib
@@ -155,15 +157,19 @@ Or provide any custom `.png` / `.jpg` path:
 python scripts/predict_single_image.py path/to/your/digit.png
 ```
 
-### 5. Interactive Jupyter Notebook
-Open the notebook in VS Code, JupyterLab, or Jupyter Notebook:
-```bash
-jupyter notebook handwritten_digit_recognition.ipynb
-```
-To regenerate and execute all notebook cells automatically:
-```bash
-python scripts/generate_notebook.py
-```
+### 5. Interactive Jupyter Notebooks
+You have two pre-executed interactive notebooks at the repository root:
+* **Notebook 1: Benchmark Baseline (`handwritten_digit_recognition.ipynb`)**
+  ```bash
+  jupyter notebook handwritten_digit_recognition.ipynb
+  ```
+  Trains the models from scratch on Scikit-Learn Digits and UCI PenDigits.
+* **Notebook 2: Real-World Custom Trials (`custom_handwritten_trials.ipynb`)**
+  ```bash
+  jupyter notebook custom_handwritten_trials.ipynb
+  ```
+  Loads the pre-trained benchmark model from `models/` and performs the complete computer vision preprocessing, segmentation, and evaluation on `self.jpeg` and custom test samples.
+
 
 ---
 
