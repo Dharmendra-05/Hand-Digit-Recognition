@@ -1,12 +1,13 @@
 """
-Handwritten Digit Recognition Pipeline
-======================================
-Identifies handwritten digits using scikit-learn's Optical Recognition
-of Handwritten Digits dataset and compares multiple ML classifiers.
+Handwritten Digit Recognition Benchmark Pipeline
+=================================================
+Trains, cross-validates, and evaluates 5 Machine Learning classifiers
+on Scikit-Learn's Optical Recognition of Handwritten Digits dataset (Ideal Case),
+and exports diagnostic benchmark results.
 
-Reference:
-- https://scikit-learn.org/1.5/auto_examples/datasets/plot_digits_last_image.html
-- https://scikit-learn.org/stable/auto_examples/classification/plot_digits_classification.html
+Output:
+- Saves confusion matrix and keypad demo plots into results/benchmark/
+- Saves trained models and scalers into models/
 """
 
 import os
@@ -22,14 +23,15 @@ if sys.platform.startswith('win'):
         sys.stderr.reconfigure(encoding='utf-8')
     except Exception:
         pass
+
+warnings.filterwarnings('ignore')
+
 import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import seaborn as sns
-
-warnings.filterwarnings('ignore')
 
 from sklearn import datasets
 from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold, cross_val_score
@@ -42,9 +44,14 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
 
+# Resolve repository root
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+
+
 def load_and_preprocess_data():
     """Loads digits dataset, scales features, and performs stratified split."""
-    print(">> [1/5] Loading Scikit-Learn Digits Dataset...")
+    print(">> [1/5] Loading Scikit-Learn Digits Dataset (Benchmark)...")
     digits = datasets.load_digits()
     
     print(f"   Total samples: {len(digits.images)}")
@@ -52,12 +59,10 @@ def load_and_preprocess_data():
     print(f"   Features per sample: {digits.data.shape[1]}")
     print(f"   Target classes: {np.unique(digits.target).tolist()}")
     
-    # Scale features to [0, 1] range
     scaler = MinMaxScaler()
     X_scaled = scaler.fit_transform(digits.data)
     y = digits.target
     
-    # Stratified 80/20 train/test split
     X_train, X_test, y_train, y_test = train_test_split(
         X_scaled, y, test_size=0.20, random_state=42, stratify=y
     )
@@ -133,17 +138,17 @@ def tune_best_model(X_train, y_train, X_test, y_test):
     return best_clf, y_pred
 
 
-def evaluate_and_plot(y_test, y_pred, save_path=os.path.join("images", "confusion_matrix.png")):
+def evaluate_and_plot(y_test, y_pred, save_path):
     """Generates detailed classification report and saves confusion matrix heatmap."""
     print("\n>> [4/5] Detailed Model Evaluation & Confusion Matrix...")
     print(classification_report(y_test, y_pred, digits=4))
     
-    os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     cm = confusion_matrix(y_test, y_pred)
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', cbar=False, square=True,
                 xticklabels=range(10), yticklabels=range(10))
-    plt.title("Confusion Matrix for Digit Recognition", fontsize=13, fontweight='bold')
+    plt.title("Confusion Matrix for Digit Recognition (Benchmark)", fontsize=13, fontweight='bold')
     plt.xlabel("Predicted Digit", fontsize=11, fontweight='bold')
     plt.ylabel("True Digit", fontsize=11, fontweight='bold')
     plt.tight_layout()
@@ -152,12 +157,12 @@ def evaluate_and_plot(y_test, y_pred, save_path=os.path.join("images", "confusio
     print(f"   Saved confusion matrix to '{save_path}'")
 
 
-def visualize_digit_prediction(image_2d, model, scaler, save_path=os.path.join("images", "digit_recognition_demo.png")):
+def visualize_digit_prediction(image_2d, model, scaler, save_path):
     """
-    Renders diagram matching prompt:
+    Renders diagram matching benchmark prompt:
     8x8 digit image pointing to identified keypad digit button [0-9].
     """
-    os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     flat = image_2d.reshape(1, -1)
     flat_scaled = scaler.transform(flat)
     
@@ -176,7 +181,7 @@ def visualize_digit_prediction(image_2d, model, scaler, save_path=os.path.join("
     
     # Image
     ax_img.imshow(image_2d, cmap=plt.cm.gray_r, interpolation='nearest', extent=[2.2, 6.8, 3.5, 8.5])
-    rect = plt.Rectangle((2.15, 3.45), 4.7, 5.1, fill=False, edgecolor='#333333', linewidth=1.5)
+    rect = patches.Rectangle((2.15, 3.45), 4.7, 5.1, fill=False, edgecolor='#333333', linewidth=1.5)
     ax_img.add_patch(rect)
     
     # Buttons 0 to 9
@@ -234,32 +239,35 @@ def visualize_digit_prediction(image_2d, model, scaler, save_path=os.path.join("
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Handwritten Digit Recognition Pipeline")
+    parser = argparse.ArgumentParser(description="Handwritten Digit Recognition Benchmark Pipeline")
     parser.add_argument("--save-model", action="store_true", default=True, help="Save trained model to models/ folder")
-    parser.add_argument("--image-dir", type=str, default="images", help="Target directory to save generated plots and images")
+    parser.add_argument("--results-dir", type=str, default=os.path.join(REPO_ROOT, "results", "benchmark"),
+                        help="Target directory to save benchmark results and plots")
+    parser.add_argument("--models-dir", type=str, default=os.path.join(REPO_ROOT, "models"),
+                        help="Target directory to save serialized models")
     args = parser.parse_args()
     
-    os.makedirs(args.image_dir, exist_ok=True)
+    os.makedirs(args.results_dir, exist_ok=True)
+    os.makedirs(args.models_dir, exist_ok=True)
     
     digits, scaler, X_train, X_test, y_train, y_test = load_and_preprocess_data()
     df_results, _ = benchmark_models(X_train, y_train, X_test, y_test)
     best_model, y_pred = tune_best_model(X_train, y_train, X_test, y_test)
     
-    cm_path = os.path.join(args.image_dir, "confusion_matrix.png")
+    cm_path = os.path.join(args.results_dir, "confusion_matrix.png")
     evaluate_and_plot(y_test, y_pred, save_path=cm_path)
     
-    print("\n>> [5/5] Recreating Prompt Demonstration (Digit 4)...")
+    print("\n>> [5/5] Recreating Benchmark Demonstration (Digit 4)...")
     idx_4 = np.where(digits.target == 4)[0][0]
-    demo_path = os.path.join(args.image_dir, "digit_recognition_demo.png")
+    demo_path = os.path.join(args.results_dir, "digit_recognition_demo.png")
     visualize_digit_prediction(digits.images[idx_4], best_model, scaler, save_path=demo_path)
     
     if args.save_model:
-        os.makedirs("models", exist_ok=True)
-        joblib.dump(best_model, "models/best_digits_svm_model.joblib")
-        joblib.dump(scaler, "models/minmax_scaler.joblib")
-        print("\n✅ Saved model and scaler to 'models/' directory.")
+        joblib.dump(best_model, os.path.join(args.models_dir, "best_digits_svm_model.joblib"))
+        joblib.dump(scaler, os.path.join(args.models_dir, "minmax_scaler.joblib"))
+        print(f"\n✅ Saved model and scaler to '{args.models_dir}' directory.")
         
-    print("\n🎉 Pipeline execution completed successfully!")
+    print("\n🎉 Benchmark pipeline execution completed successfully!")
 
 
 if __name__ == "__main__":

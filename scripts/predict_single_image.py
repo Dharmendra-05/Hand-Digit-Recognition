@@ -1,12 +1,13 @@
 """
-Custom Handwritten Digit Predictor
-===================================
-Allows users to pass their own handwritten digit image (PNG, JPG, etc.),
-applies preprocessing (inversion, auto-crop, centering, and 8x8 resizing),
-and predicts the digit using the trained Support Vector Machine model.
+Single Custom Handwritten Digit Predictor
+=========================================
+Predicts an arbitrary handwritten digit from an image file (PNG, JPG, etc.).
+Preprocesses the image (polarity inversion, centering, smoothing, and 8x8 resizing),
+runs inference using the trained Support Vector Machine model,
+and saves a 3-panel diagnostic visualization.
 
 Usage:
-    python predict_custom_image.py path/to/your_image.png
+    python scripts/predict_single_image.py data/custom_trials/samples/sample_digit_3.png
 """
 
 import os
@@ -27,7 +28,10 @@ warnings.filterwarnings('ignore')
 import joblib
 import numpy as np
 import matplotlib.pyplot as plt
-from PIL import Image, ImageOps, ImageFilter
+from PIL import Image, ImageFilter
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 
 
 def preprocess_image(image_path):
@@ -35,7 +39,7 @@ def preprocess_image(image_path):
     Preprocesses an arbitrary handwritten image into an 8x8 matrix
     compatible with the scikit-learn digits format:
     1. Grayscale conversion
-    2. Polarity detection & inversion (scikit-learn uses 0=background, 16=stroke)
+    2. Polarity detection & inversion (0=background, 16=stroke)
     3. Bounding box cropping & aspect-ratio-preserving centering
     4. Anti-aliased downsampling to 8x8 pixels
     5. Normalization to [0, 16] range
@@ -71,7 +75,7 @@ def preprocess_image(image_path):
     
     digit_crop = arr[rmin:rmax+1, cmin:cmax+1]
     
-    # 4. Center inside a square canvas with 15% margin
+    # 4. Center inside a square canvas with 18% margin
     h, w = digit_crop.shape
     size = max(h, w)
     pad = int(size * 0.18)
@@ -86,20 +90,23 @@ def preprocess_image(image_path):
     pil_square = Image.fromarray(square_canvas.astype(np.uint8))
     pil_square = pil_square.filter(ImageFilter.GaussianBlur(radius=max(1, total_size // 40)))
     
-    # 6. Resize to 8x8 using high-quality Bilinear/Lanczos interpolation
+    # 6. Resize to 8x8 using Bilinear interpolation
     resized_8x8 = pil_square.resize((8, 8), Image.Resampling.BILINEAR)
     arr_8x8 = np.array(resized_8x8, dtype=np.float32)
     
-    # 7. Scale intensities to [0, 16] as expected by the digits dataset
+    # 7. Scale intensities to [0, 16]
     if arr_8x8.max() > 0:
         arr_8x8 = (arr_8x8 / arr_8x8.max()) * 16.0
         
     return orig_img, arr_8x8
 
 
-def predict_digit(image_path, model_path="models/best_digits_svm_model.joblib",
-                  scaler_path="models/minmax_scaler.joblib",
-                  output_dir="images"):
+def predict_digit(
+    image_path,
+    model_path=os.path.join(REPO_ROOT, "models", "best_digits_svm_model.joblib"),
+    scaler_path=os.path.join(REPO_ROOT, "models", "minmax_scaler.joblib"),
+    output_dir=os.path.join(REPO_ROOT, "results", "custom_trials", "samples")
+):
     """Loads model, runs prediction, and plots diagnostic visualization."""
     orig_img, arr_8x8 = preprocess_image(image_path)
     
@@ -119,7 +126,6 @@ def predict_digit(image_path, model_path="models/best_digits_svm_model.joblib",
     print(f"📊 Model Confidence:  {confidence:.2f}%")
     print("=" * 50)
     
-    # Generate visualization
     os.makedirs(output_dir, exist_ok=True)
     base_name = os.path.splitext(os.path.basename(image_path))[0]
     save_path = os.path.join(output_dir, f"custom_prediction_{base_name}.png")
@@ -160,11 +166,11 @@ def predict_digit(image_path, model_path="models/best_digits_svm_model.joblib",
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Predict handwritten digit from a custom image file")
+    parser = argparse.ArgumentParser(description="Predict handwritten digit from a single image file")
     parser.add_argument("image_path", help="Path to your handwritten digit image (PNG, JPG, etc.)")
-    parser.add_argument("--model", default="models/best_digits_svm_model.joblib", help="Path to trained model")
-    parser.add_argument("--scaler", default="models/minmax_scaler.joblib", help="Path to scaler")
-    parser.add_argument("--outdir", default="images", help="Directory to save prediction visualization")
+    parser.add_argument("--model", default=os.path.join(REPO_ROOT, "models", "best_digits_svm_model.joblib"), help="Path to trained model")
+    parser.add_argument("--scaler", default=os.path.join(REPO_ROOT, "models", "minmax_scaler.joblib"), help="Path to scaler")
+    parser.add_argument("--outdir", default=os.path.join(REPO_ROOT, "results", "custom_trials", "samples"), help="Directory to save prediction visualization")
     args = parser.parse_args()
     
     predict_digit(args.image_path, model_path=args.model, scaler_path=args.scaler, output_dir=args.outdir)

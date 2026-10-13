@@ -12,6 +12,9 @@ if sys.platform.startswith('win'):
 import nbformat as nbf
 from nbclient import NotebookClient
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+
 nb = nbf.v4.new_notebook()
 nb.metadata = {
     "language_info": {
@@ -28,21 +31,21 @@ cells = []
 
 # Cell 1: Markdown Title & Intro
 cells.append(nbf.v4.new_markdown_cell("""# 🖋️ Handwritten Digit Recognition
-### Complete End-to-End Machine Learning Pipeline & Comparative Study
+### Ideal Case Benchmark: Optical & Trajectory Digit Recognition Pipeline
 
 * **Primary Dataset**: [Scikit-learn Digits Dataset Documentation](https://scikit-learn.org/1.5/auto_examples/datasets/plot_digits_last_image.html) & [Recognizing Hand-Written Digits](https://scikit-learn.org/stable/auto_examples/classification/plot_digits_classification.html)
-* **Extended Dataset**: [UCI Pen-Based Recognition of Handwritten Digits](https://archive.ics.uci.edu/dataset/81/pen+based+recognition+of+handwritten+digits) (Available in `assets/Dataset/`)
-* **Core Objective**: Build, evaluate, and compare machine learning models to accurately classify handwritten digits across two complementary paradigms:
-  1. **Pixel-Based Recognition**: 8×8 pixel grayscale images (Scikit-Learn Digits).
-  2. **Trajectory-Based Recognition**: 8-point resampled pen stroke coordinate sequences (UCI PenDigits).
+* **Trajectory Benchmark**: [UCI Pen-Based Recognition of Handwritten Digits](https://archive.ics.uci.edu/dataset/81/pen+based+recognition+of+handwritten+digits) (in `data/benchmark/uci_pendigits/`)
+* **Objective**: Establish the ideal laboratory baseline for multi-class handwritten digit recognition across two modalities:
+  1. **Pixel Intensity Representation**: $8 \\times 8$ grayscale matrices (Scikit-Learn Digits).
+  2. **Pen Stroke Trajectory Representation**: 8-point spatial coordinate sequences (UCI PenDigits).
 
 ---
 
-### Project Architecture & Workflow:
+### Benchmark Pipeline Workflow:
 1. **Environment Setup & Imports**: Standard scientific libraries (`numpy`, `pandas`, `matplotlib`, `seaborn`, `scikit-learn`).
-2. **Dataset Acquisition & Inspection**: Loading 1,797 samples of 8×8 grayscale images and analyzing metadata.
+2. **Dataset Acquisition & Inspection**: 1,797 samples of $8 \\times 8$ grayscale images across 10 balanced classes (`0` to `9`).
 3. **Reproducing the Scikit-Learn Example**: Visualizing sample digits and dataset properties (`plot_digits_last_image.html`).
-4. **Exploratory Data Analysis (EDA)**: Class distribution, average pixel heatmaps for digits 0–9.
+4. **Exploratory Data Analysis (EDA)**: Class distributions and average pixel template heatmaps for digits 0–9.
 5. **Dimensionality Reduction**: Visualizing 64D feature representations in 2D with **PCA** and **t-SNE**.
 6. **Data Preprocessing**: Image flattening, normalization/scaling, and stratified train/test split.
 7. **Model Comparison**:
@@ -51,11 +54,11 @@ cells.append(nbf.v4.new_markdown_cell("""# 🖋️ Handwritten Digit Recognition
    - **Random Forest Classifier**
    - **K-Nearest Neighbors (KNN)**
    - Multi-Layer Perceptron (**MLP / Neural Network**)
-8. **Hyperparameter Tuning**: Optimizing the top-performing model via `GridSearchCV`.
+8. **Hyperparameter Tuning**: Optimizing Support Vector Machine via `GridSearchCV` (**>99% test accuracy**).
 9. **Evaluation & Diagnostics**: Classification reports, confusion matrices, and misclassification error analysis.
 10. **Interactive Prediction Pipeline**: Recreating the visual digit recognizer matching the project prompt (Digit `4` detection).
 11. **Extended Domain: Pen-Based Trajectory Recognition**: Training on 10,992 pen stroke trajectories from UCI.
-12. **Model Persistence**: Serializing model weights using `joblib` for deployment.
+12. **Model Persistence**: Serializing model weights using `joblib` into `models/`.
 """))
 
 # Cell 2: Imports
@@ -95,11 +98,14 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay
 )
 
-# Plot styling
+# Plot styling & directories
 plt.rcParams['figure.dpi'] = 120
-# Create dedicated images directory
-os.makedirs("images", exist_ok=True)
-print("✅ All required packages successfully imported and 'images/' folder initialized!")
+plt.rcParams['font.sans-serif'] = 'DejaVu Sans'
+sns.set_theme(style="whitegrid", palette="muted")
+
+os.makedirs("results/benchmark", exist_ok=True)
+os.makedirs("models", exist_ok=True)
+print("✅ Environment initialized! Output directories 'results/benchmark/' and 'models/' ready.")
 """))
 
 # Cell 3: Loading Dataset
@@ -134,12 +140,10 @@ Here we reproduce the exact demonstration from `plot_digits_last_image.html` alo
 cells.append(nbf.v4.new_code_cell("""# Recreate plot_digits_last_image.html and sample digit 4
 fig, axes = plt.subplots(1, 2, figsize=(9, 4.5))
 
-# Plot the last image in the dataset
 axes[0].imshow(digits.images[-1], cmap=plt.cm.gray_r, interpolation="nearest")
 axes[0].set_title(f"Last Image in Dataset\\nTrue Label: {digits.target[-1]}", fontsize=12, fontweight='bold', pad=10)
 axes[0].axis("off")
 
-# Find the first occurrence of digit 4
 idx_4 = np.where(digits.target == 4)[0][0]
 axes[1].imshow(digits.images[idx_4], cmap=plt.cm.gray_r, interpolation="nearest")
 axes[1].set_title(f"Sample Digit '4' (Index {idx_4})\\nTrue Label: 4", fontsize=12, fontweight='bold', pad=10)
@@ -213,7 +217,7 @@ for digit_val in range(10):
 
 plt.suptitle("Average (Mean) Pixel Intensity Templates Across Digits", fontsize=14, y=1.00)
 plt.tight_layout()
-plt.savefig('images/mean_digits_template.png', dpi=150, bbox_inches='tight')
+plt.savefig('results/benchmark/mean_digits_template.png', dpi=150, bbox_inches='tight')
 plt.show()
 """))
 
@@ -250,7 +254,7 @@ ax2.set_ylabel("t-SNE Dimension 2")
 cbar = fig.colorbar(scatter2, ax=[ax1, ax2], ticks=range(10), label="Digit Class", shrink=0.8)
 cbar.ax.set_yticklabels(range(10))
 plt.suptitle("64D Feature Space Projections in 2D Space", fontsize=14, y=0.98)
-plt.savefig('images/pca_tsne_projections.png', dpi=150, bbox_inches='tight')
+plt.savefig('results/benchmark/pca_tsne_projections.png', dpi=150, bbox_inches='tight')
 plt.show()
 """))
 
@@ -308,14 +312,10 @@ cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 for name, clf in models.items():
     start_time = time.time()
     
-    # 5-fold CV score on training set
     cv_scores = cross_val_score(clf, X_train, y_train, cv=cv, scoring='accuracy')
-    
-    # Fit model on full training set
     clf.fit(X_train, y_train)
     fit_time = time.time() - start_time
     
-    # Evaluate on held-out test set
     y_pred = clf.predict(X_test)
     test_acc = accuracy_score(y_test, y_pred)
     
@@ -331,7 +331,6 @@ for name, clf in models.items():
         "Training Time (s)": round(fit_time, 3)
     })
 
-# Format results into DataFrame
 df_results = pd.DataFrame(results).sort_values(by="Test Accuracy (%)", ascending=False).reset_index(drop=True)
 print(df_results.to_string(index=False))
 """))
@@ -352,7 +351,7 @@ for bar in bars:
 
 plt.gca().invert_yaxis()
 plt.tight_layout()
-plt.savefig('images/model_comparison.png', dpi=150, bbox_inches='tight')
+plt.savefig('results/benchmark/model_comparison.png', dpi=150, bbox_inches='tight')
 plt.show()
 """))
 
@@ -384,7 +383,6 @@ best_model = grid_search.best_estimator_
 print(f"🏆 Best Parameters: {grid_search.best_params_}")
 print(f"🏆 Best Cross-Validation Accuracy: {grid_search.best_score_*100:.2f}%")
 
-# Test evaluation of best estimator
 y_test_pred = best_model.predict(X_test)
 final_test_acc = accuracy_score(y_test, y_test_pred)
 print(f"🏆 Final Test Set Accuracy: {final_test_acc*100:.2f}%")
@@ -421,7 +419,7 @@ plt.title(f"Confusion Matrix (Test Accuracy: {final_test_acc*100:.2f}%)", fontsi
 plt.xlabel("Predicted Digit Class", fontsize=11, fontweight='bold', labelpad=8)
 plt.ylabel("True Digit Class", fontsize=11, fontweight='bold', labelpad=8)
 plt.tight_layout()
-plt.savefig('images/confusion_matrix.png', dpi=150, bbox_inches='tight')
+plt.savefig('results/benchmark/confusion_matrix.png', dpi=150, bbox_inches='tight')
 plt.show()
 """))
 
@@ -488,24 +486,18 @@ cells.append(nbf.v4.new_code_cell("""def predict_and_visualize_digit(image_2d, m
     probabilities = model.predict_proba(flat_scaled)[0]
     confidence = probabilities[prediction] * 100
     
-    # Create figure
     fig = plt.figure(figsize=(12, 5.5))
     gs = fig.add_gridspec(2, 2, width_ratios=[1.2, 1], height_ratios=[1.8, 1])
     
-    # Ax 0: Image & Keypad Buttons
     ax_img = fig.add_subplot(gs[:, 0])
     ax_img.set_xlim(-1, 10)
     ax_img.set_ylim(-2, 10)
     ax_img.axis('off')
     
-    # Display the digit image centered
     ax_img.imshow(image_2d, cmap=plt.cm.gray_r, interpolation='nearest', extent=[2.2, 6.8, 3.5, 8.5])
-    
-    # Border around the image
     rect = patches.Rectangle((2.15, 3.45), 4.7, 5.1, fill=False, edgecolor='#333333', linewidth=1.5)
     ax_img.add_patch(rect)
     
-    # Draw keypad buttons 0 to 9 at the bottom
     for digit in range(10):
         bx = digit * 1.0 - 0.5
         by = -0.5
@@ -527,7 +519,6 @@ cells.append(nbf.v4.new_code_cell("""def predict_and_visualize_digit(image_2d, m
             color='white' if is_pred else '#333333'
         )
         
-        # Arrow pointing to the predicted button
         if is_pred:
             ax_img.annotate(
                 '',
@@ -539,7 +530,6 @@ cells.append(nbf.v4.new_code_cell("""def predict_and_visualize_digit(image_2d, m
     ax_img.text(4.5, 9.3, "Identify hand written digits recognition", ha='center', fontsize=13, fontweight='bold')
     ax_img.text(4.5, -1.5, f"Predicted: Class {prediction} (Confidence: {confidence:.2f}%)", ha='center', fontsize=11, fontweight='bold', color='#4A148C')
 
-    # Ax 1: Probability Distribution Bar Chart
     ax_prob = fig.add_subplot(gs[:, 1])
     colors = ['#6F42C1' if i == prediction else '#A0C4E2' for i in range(10)]
     bars = ax_prob.bar(range(10), probabilities * 100, color=colors, edgecolor='black', width=0.65)
@@ -555,10 +545,10 @@ cells.append(nbf.v4.new_code_cell("""def predict_and_visualize_digit(image_2d, m
             ax_prob.text(bar.get_x() + bar.get_width()/2.0, h + 2, f"{h:.1f}%", ha='center', va='bottom', fontsize=8.5, fontweight='bold')
             
     plt.tight_layout()
-    plt.savefig('images/digit_recognition_demo.png', dpi=150, bbox_inches='tight')
+    plt.savefig('results/benchmark/digit_recognition_demo.png', dpi=150, bbox_inches='tight')
     plt.show()
 
-# Run the visual recognizer on a sample digit '4'
+# Run the visual recognizer on sample digit '4'
 idx_sample_4 = np.where(digits.target == 4)[0][0]
 predict_and_visualize_digit(digits.images[idx_sample_4], best_model)
 """))
@@ -567,7 +557,7 @@ predict_and_visualize_digit(digits.images[idx_sample_4], best_model)
 cells.append(nbf.v4.new_markdown_cell("""## 11. Extended Domain: Pen-Based Trajectory Recognition (UCI PenDigits)
 
 In addition to pixel-intensity matrices ($8 \\times 8$), handwritten digits can also be captured as **coordinate trajectories** over time.
-The local repository includes the **UCI Pen-Based Recognition of Handwritten Digits** dataset (`assets/Dataset/pendigits.tra` and `pendigits.tes`), collected from 44 writers using a pressure-sensitive tablet.
+The local repository includes the **UCI Pen-Based Recognition of Handwritten Digits** dataset (`data/benchmark/uci_pendigits/pendigits.tra` and `pendigits.tes`), collected from 44 writers using a pressure-sensitive tablet.
 
 ### Attributes:
 - 16 input attributes representing 8 resampled spatial coordinate pairs: $(x_1, y_1, x_2, y_2, \\dots, x_8, y_8)$.
@@ -577,8 +567,8 @@ The local repository includes the **UCI Pen-Based Recognition of Handwritten Dig
 
 # Cell 27: Code Loading and Visualizing Pen Trajectories
 cells.append(nbf.v4.new_code_cell("""# Load the UCI pen-based trajectory datasets
-df_pen_train = pd.read_csv('assets/Dataset/pendigits.tra', header=None)
-df_pen_test = pd.read_csv('assets/Dataset/pendigits.tes', header=None)
+df_pen_train = pd.read_csv('data/benchmark/uci_pendigits/pendigits.tra', header=None)
+df_pen_test = pd.read_csv('data/benchmark/uci_pendigits/pendigits.tes', header=None)
 
 X_pen_train = df_pen_train.iloc[:, :-1].values
 y_pen_train = df_pen_train.iloc[:, -1].values
@@ -588,7 +578,6 @@ y_pen_test = df_pen_test.iloc[:, -1].values
 print(f"UCI PenDigits Training: {X_pen_train.shape[0]} samples, {X_pen_train.shape[1]} attributes")
 print(f"UCI PenDigits Testing:  {X_pen_test.shape[0]} samples, {X_pen_test.shape[1]} attributes")
 
-# Visualize the 8-point pen trajectory strokes for digits 0 through 9
 fig, axes = plt.subplots(2, 5, figsize=(14, 6))
 axes = axes.flatten()
 
@@ -597,7 +586,6 @@ for d in range(10):
     xs = sample_row[0::2]
     ys = sample_row[1::2]
     
-    # Plot pen stroke trajectory
     axes[d].plot(xs, ys, marker='o', color='#2B5B84', linewidth=2.5, markersize=5)
     axes[d].scatter(xs[0], ys[0], color='green', s=70, zorder=5, label='Start' if d==0 else "")
     axes[d].scatter(xs[-1], ys[-1], color='red', s=70, zorder=5, label='End' if d==0 else "")
@@ -610,7 +598,7 @@ for d in range(10):
 axes[0].legend(loc='lower left', fontsize=8)
 plt.suptitle("UCI PenDigits: Resampled Pen Stroke Trajectories (8 Coordinates)", fontsize=14, y=0.99)
 plt.tight_layout()
-plt.savefig('images/pen_trajectories.png', dpi=150, bbox_inches='tight')
+plt.savefig('results/benchmark/pen_trajectories.png', dpi=150, bbox_inches='tight')
 plt.show()
 """))
 
@@ -635,7 +623,7 @@ print(classification_report(y_pen_test, y_pen_pred, digits=4))
 # Cell 29: Markdown Persistence
 cells.append(nbf.v4.new_markdown_cell("""## 12. Model Persistence & Artifact Export
 
-We serialize the trained model and scalers to disk using `joblib` so that they can be integrated into web applications, desktop GUIs, or REST APIs.
+We serialize the trained model and scalers to disk using `joblib` into `models/`.
 """))
 
 # Cell 30: Code Persistence
@@ -651,7 +639,6 @@ print("✅ Saved Pixel Scaler to 'models/minmax_scaler.joblib'")
 print("✅ Saved Pen-Based Model to 'models/pendigits_svm_model.joblib'")
 print("✅ Saved Pen Scaler to 'models/pendigits_scaler.joblib'")
 
-# Verification test: Load and perform inference
 loaded_model = joblib.load("models/best_digits_svm_model.joblib")
 loaded_scaler = joblib.load("models/minmax_scaler.joblib")
 
@@ -661,7 +648,7 @@ print(f"✅ Reloaded model validation: Predicted {pred_check} (Expected 4)")
 """))
 
 # Cell 31: Markdown Conclusion
-cells.append(nbf.v4.new_markdown_cell("""## 13. Key Findings & Cross-Paradigm Comparison
+cells.append(nbf.v4.new_markdown_cell("""## 13. Ideal Benchmark Summary vs. Real-World Trials
 
 ### Benchmark Synthesis:
 | Paradigm | Dataset Source | Representation | Test Accuracy | Generalization |
@@ -669,23 +656,23 @@ cells.append(nbf.v4.new_markdown_cell("""## 13. Key Findings & Cross-Paradigm Co
 | **Pixel Intensity** | Scikit-Learn Digits | $8 \\times 8$ grayscale matrix (64 features) | **99.17%** | Stratified split over 1,797 samples |
 | **Stroke Trajectory** | UCI PenDigits | 8 resampled $(x, y)$ spatial coordinates (16 features) | **98.26%** | Writer-independent (tested on 14 unseen writers) |
 
-### Key Conclusions:
-1. **High Precision on Low Resolution**: The Support Vector Classifier (RBF kernel) excels on $8 \\times 8$ pixel grids, achieving >99% test accuracy with zero hyperparameter complexity.
+### Key Benchmark Conclusions:
+1. **High Precision on Low Resolution**: The Support Vector Classifier (RBF kernel) excels on $8 \\times 8$ pixel grids in controlled lab conditions, achieving >99% test accuracy.
 2. **Trajectory Efficiency**: Spatial pen resampling compresses digits into only 16 coordinate values while preserving 98.26% accuracy on unseen writers.
-3. **Reproducibility**: The notebook faithfully recreates Scikit-Learn's `plot_digits_last_image.html` and `plot_digits_classification.html`, providing an interactive digit-to-button visual interface matching the prompt diagram.
+3. **The Real-World Gap**: Notice that this 99% accuracy is on clean, controlled benchmark data. For real-world unseen handwriting on paper (Trial 1), run `python scripts/evaluate_trial_1.py` to see the domain shift analysis!
 """))
 
 nb.cells = cells
 
-# Save notebook file
-notebook_path = "handwritten_digit_recognition.ipynb"
+# Save notebook to repo root
+notebook_path = os.path.join(REPO_ROOT, "handwritten_digit_recognition.ipynb")
 with open(notebook_path, "w", encoding="utf-8") as f:
     nbf.write(nb, f)
 
 print(f"Notebook written to {notebook_path}. Now executing notebook...")
 
-# Execute notebook so that all outputs, charts, tables, and reports are pre-calculated!
-client = NotebookClient(nb, timeout=600, kernel_name='python3')
+# Execute notebook from repo root cwd
+client = NotebookClient(nb, timeout=600, kernel_name='python3', resources={'metadata': {'path': REPO_ROOT}})
 client.execute()
 
 with open(notebook_path, "w", encoding="utf-8") as f:
