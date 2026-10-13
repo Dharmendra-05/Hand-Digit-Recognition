@@ -134,6 +134,17 @@ This will:
 - Save generated figures to the dedicated `images/` directory
 - Export trained artifacts to the `models/` directory
 
+### 4. Test on Your Own Handwriting
+You can test the trained model on your own handwritten digit images (PNG, JPG):
+```bash
+python predict_custom_image.py assets/samples/sample_digit_3.png
+```
+This utility:
+- Automatically detects and corrects background polarity (dark on white paper vs light on dark).
+- Detects the digit's bounding box and centers it within a square canvas.
+- Smooths and resizes the image down to the model's native $8 \times 8$ pixel format.
+- Outputs the predicted digit, confidence percentage, and saves a 3-panel diagnostic plot to `images/`.
+
 ---
 
 ## 🖼️ Visual Recognition Demo
