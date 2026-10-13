@@ -34,26 +34,29 @@ cells.append(nbf.v4.new_markdown_cell("""# 📝 Real-World Custom Handwritten Tr
 ### Evaluating Pre-Trained Benchmark Models on Unseen Real-World Handwriting (Domain Shift Analysis)
 
 * **Pre-Trained Model**: Support Vector Classifier (`models/best_digits_svm_model.joblib`) trained on the Scikit-Learn Digits benchmark (>99% accuracy in `handwritten_digit_recognition.ipynb`).
-* **Trial 1 Dataset**: Real-world smartphone photo (`data/custom_trials/trial_01_phone_lined_paper/self.jpeg`) of 10 digits (`0` to `9`) written in blue ballpoint ink on red-lined notebook paper.
+* **Trial 1 Dataset**: Smartphone photo (`data/custom_trials/trial_01_phone_lined_paper/self.jpeg`) of 10 digits (`0` to `9`) written horizontally in blue ballpoint ink on red-lined paper (**50% accuracy**).
+* **Trial 2 Dataset**: Second smartphone photo (`data/custom_trials/trial_02_vertical_column/sample_02.jpeg`) of 10 digits (`0` to `9`) written in a single **vertical column** on lined paper (**20% accuracy**).
 * **Core Objective**: Experience and analyze **Domain Shift** firsthand:
-  - Why does a model with **>99% lab accuracy** drop to **50% accuracy** on raw human handwriting?
-  - How computer vision preprocessing (color-space ink isolation, morphological dilation, aspect-ratio preservation) bridges the gap between raw camera photos and $8 \\times 8$ pixel inputs.
+  - Why does a model with **>99% lab accuracy** drop to **50% in Trial 1** and **20% in Trial 2**?
+  - How computer vision preprocessing (ink thresholding, rule-line filtering, morphological dilation, aspect-ratio preservation) bridges the gap between raw camera photos and $8 \\times 8$ pixel inputs.
 
 ---
 
 ### Notebook Outline:
 1. **Model Loading & Verification**: Loading pre-trained SVM model and scaler artifacts from `models/`.
-2. **Trial 1 Challenge (Raw Photo Inspection)**: Loading `self.jpeg` and inspecting orientation, paper texture, and rule lines.
-3. **Preprocessing Pipeline (Noise vs. Ink)**:
-   - Why naive grayscale thresholding fails on notebook lines.
-   - Isolating blue ballpoint ink using color difference: `(b - r) > 10`.
-   - Applying **morphological dilation** to match NIST stroke thickness.
-4. **Automated Character Segmentation**: Extracting and ordering all 10 handwritten digits (`0` through `9`).
-5. **Full Multi-Digit Evaluation (Trial 1)**:
-   - Visualizing real photo crops side-by-side with $8 \\times 8$ model inputs and predictions.
-   - Comprehensive accuracy and confusion breakdown (5/10 = 50%).
-6. **Single-Digit Custom Inference**: Testing arbitrary external samples (`sample_digit_3.png` and `sample_digit_0.png`) with confidence distributions.
-7. **Root Cause Analysis & Domain Shift Takeaways**: Architectural insights on resolution, stroke morphology, and data augmentation.
+2. **Trial 1 Deep Dive (2-Row Horizontal Layout)**:
+   - Orientation correction & why naive grayscale thresholding fails on notebook lines.
+   - Blue ink segmentation: `(b - r) > 10`.
+   - Morphological stroke dilation matching NIST stroke thickness.
+   - Multi-digit evaluation & accuracy analysis (50.0%).
+3. **Trial 2 Deep Dive (Single Vertical Column Layout)**:
+   - Suppressing horizontal rule lines with morphological grey opening.
+   - Automated vertical digit segmentation (0 at top, down to 9 at bottom).
+   - Multi-digit evaluation & accuracy analysis (20.0%).
+4. **Single-Digit Custom Inference**: Testing arbitrary external samples (`sample_digit_3.png` and `sample_digit_0.png`) with confidence distributions.
+5. **Cross-Trial Comparison & Domain Shift Takeaways**:
+   - Why lab 99% $\\rightarrow$ Trial 1 50% $\\rightarrow$ Trial 2 20%?
+   - Architectural lessons on resolution, aspect ratio distortion, and real-world deployment.
 """))
 
 # Cell 2: Code Imports & Setup
@@ -97,155 +100,58 @@ print(f"   Number of classes: {len(model.classes_)} ({list(model.classes_)})")
 print(f"✅ Loaded Scaler: {type(scaler).__name__} (Feature range: {scaler.feature_range})")
 """))
 
-# Cell 5: Markdown Section 2 - Inspecting Raw Trial 1 Image
-cells.append(nbf.v4.new_markdown_cell("""## 2. Inspecting the Real-World Trial 1 Photo (`self.jpeg`)
+# Cell 5: Markdown Section 2 - Trial 1 Overview
+cells.append(nbf.v4.new_markdown_cell("""## 2. Real-World Trial 1: Horizontal Two-Row Layout (`self.jpeg`)
 
-The input image was taken using a smartphone camera of handwritten digits written with a blue ballpoint pen on red-lined notebook paper.
-
-### Real-World Complexities:
-1. **Camera Rotation**: Phone camera EXIF / capture orientation is rotated 90° clockwise.
-2. **Notebook Rule Lines**: Red horizontal lines run directly through several digits (especially 4, 5, 6, 7).
-3. **Thin Ink Stroke**: Ballpoint pen strokes are only 1–2 pixels wide, far thinner than NIST digits.
-4. **Lighting & Shadows**: Uneven ambient room illumination across the page.
+In Trial 1, 10 handwritten digits (`0` through `9`) were written horizontally across two rows with blue ballpoint pen on red-lined paper.
 """))
 
-# Cell 6: Code Loading and Orienting Photo
+# Cell 6: Code Trial 1 Preprocessing and Segmentation
 cells.append(nbf.v4.new_code_cell("""# Load Trial 1 raw image
 TRIAL1_IMG_PATH = "data/custom_trials/trial_01_phone_lined_paper/self.jpeg"
-raw_img = Image.open(TRIAL1_IMG_PATH)
+raw_img1 = Image.open(TRIAL1_IMG_PATH)
 
 # Correct orientation (90 degrees counter-clockwise)
-oriented_img = raw_img.rotate(90, expand=True)
-arr_rgb = np.array(oriented_img, dtype=np.float32)
+oriented_img1 = raw_img1.rotate(90, expand=True)
+arr_rgb1 = np.array(oriented_img1, dtype=np.float32)
 
-fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-axes[0].imshow(raw_img)
-axes[0].set_title(f"Original Camera Capture (Rotated)\\nDimensions: {raw_img.size[0]} x {raw_img.size[1]} px", fontsize=11, fontweight='bold')
-axes[0].axis('off')
-
-axes[1].imshow(oriented_img)
-axes[1].set_title(f"Orientation Corrected (Upright)\\nDimensions: {oriented_img.size[0]} x {oriented_img.size[1]} px", fontsize=11, fontweight='bold')
-axes[1].axis('off')
-
-plt.suptitle("Trial 1: Raw Smartphone Capture vs. Orientation Correction", fontsize=13, fontweight='bold')
-plt.tight_layout()
-plt.show()
-"""))
-
-# Cell 7: Markdown Section 3 - Why Naive Grayscale Fails
-cells.append(nbf.v4.new_markdown_cell("""## 3. Preprocessing: Why Naive Grayscale Fails & How Color Filtering Solves It
-
-If we simply convert the image to grayscale and apply standard Otsu/global thresholding, the **red notebook rule lines** are treated as dark foreground, fusing with the digits and completely destroying character topology.
-
-To solve this, we leverage the **RGB color space**:
-- Notebook paper is cream/white ($R \\approx G \\approx B > 180$).
-- Notebook lines are red/pink ($R > B$).
-- Ballpoint pen ink is blue ($B > R$ and moderate brightness).
-
-By using the rule:
-$$\\text{is\\_ink} = (\\text{brightness} < 160) \\land ((B - R) > 10)$$
-we isolate the blue ballpoint strokes while completely rejecting the red notebook lines!
-"""))
-
-# Cell 8: Code Comparing Grayscale vs Color Thresholding
-cells.append(nbf.v4.new_code_cell("""# Compare naive grayscale thresholding vs. color-difference ink isolation
-r, g, b = arr_rgb[:, :, 0], arr_rgb[:, :, 1], arr_rgb[:, :, 2]
+# Isolate blue ballpoint ink using color difference ((b - r) > 10)
+r, g, b = arr_rgb1[:, :, 0], arr_rgb1[:, :, 1], arr_rgb1[:, :, 2]
 brightness = (r + g + b) / 3.0
-
-# 1. Naive Grayscale Thresholding
-naive_gray_thresh = brightness < 160
-
-# 2. Targeted Blue-Ink Isolation (strips red lines)
 blue_ink_mask = (brightness < 160) & ((b - r) > 10)
 
-fig, axes = plt.subplots(1, 3, figsize=(16, 5))
-axes[0].imshow(oriented_img)
-axes[0].set_title("1. Original RGB Photo", fontsize=11, fontweight='bold')
-axes[0].axis('off')
-
-axes[1].imshow(naive_gray_thresh, cmap='gray_r')
-axes[1].set_title("2. Naive Grayscale Thresholding\\n(Fails: Red Lines Captured as Noise)", fontsize=11, fontweight='bold', color='red')
-axes[1].axis('off')
-
-axes[2].imshow(blue_ink_mask, cmap='gray_r')
-axes[2].set_title("3. Color Difference Filtering ((B - R) > 10)\\n(Success: Clean Blue Ink Isolation)", fontsize=11, fontweight='bold', color='green')
-axes[2].axis('off')
-
-plt.tight_layout()
-plt.show()
-"""))
-
-# Cell 9: Markdown Section 4 - Morphological Dilation
-cells.append(nbf.v4.new_markdown_cell("""## 4. Stroke Thickness Adjustment: Morphological Dilation
-
-In the Scikit-Learn Digits dataset, characters are written with thick strokes relative to the $8 \\times 8$ pixel canvas.
-A thin ballpoint pen stroke (~1–2 pixels) collapses into fragmented or disconnected pixels when scaled down to an $8 \\times 8$ matrix.
-
-To preserve stroke topology during downsampling, we apply **morphological dilation** (`scipy.ndimage.binary_dilation` with 3 iterations), expanding the stroke thickness to match the training distribution.
-"""))
-
-# Cell 10: Code Demonstrating Dilation
-cells.append(nbf.v4.new_code_cell("""# Demonstrate effect of morphological dilation on stroke thickness
-dilated_ink = ndi.binary_dilation(blue_ink_mask, iterations=3)
-
-fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-axes[0].imshow(blue_ink_mask, cmap='gray_r')
-axes[0].set_title("Raw Blue Ink Mask (Thin Ballpoint Strokes ~1-2 px)", fontsize=11, fontweight='bold')
-axes[0].axis('off')
-
-axes[1].imshow(dilated_ink, cmap='gray_r')
-axes[1].set_title("After Morphological Dilation (3 Iterations)\\nMatches NIST Stroke Thickness", fontsize=11, fontweight='bold')
-axes[1].axis('off')
-
-plt.tight_layout()
-plt.show()
-"""))
-
-# Cell 11: Markdown Section 5 - Segmentation & Multi-Digit Evaluation
-cells.append(nbf.v4.new_markdown_cell("""## 5. Automated Character Segmentation & Evaluation (Trial 1)
-
-Now we automatically locate, crop, and evaluate each of the 10 handwritten digits (`0` through `9`).
-Each crop is:
-1. Centered inside a square aspect-ratio canvas.
-2. Resampled to the model's native $8 \\times 8$ pixel format using bilinear interpolation.
-3. Normalized to range $[0, 16]$.
-4. Scaled with `minmax_scaler` and classified with `best_digits_svm_model`.
-"""))
-
-# Cell 12: Code Multi-Digit Evaluation Grid
-cells.append(nbf.v4.new_code_cell("""# Segment and order the 10 handwritten digits
+# Segment the 10 digits across 2 rows
 segment_dilated = ndi.binary_dilation(blue_ink_mask, iterations=6)
 labeled, num_features = ndi.label(segment_dilated)
 objects = ndi.find_objects(labeled)
 
-boxes = []
+boxes1 = []
 for sl in objects:
     if np.sum(blue_ink_mask[sl]) > 100:
-        boxes.append((sl[0].start, sl[0].stop, sl[1].start, sl[1].stop))
+        boxes1.append((sl[0].start, sl[0].stop, sl[1].start, sl[1].stop))
 
-# Separate into top row and bottom row
-row1 = sorted([b for b in boxes if (b[0] + b[1]) / 2 < 300], key=lambda b: b[2])
-row2 = sorted([b for b in boxes if (b[0] + b[1]) / 2 >= 300], key=lambda b: b[2])
-digits_order = row1 + row2
+row1 = sorted([bx for bx in boxes1 if (bx[0] + bx[1]) / 2 < 300], key=lambda bx: bx[2])
+row2 = sorted([bx for bx in boxes1 if (bx[0] + bx[1]) / 2 >= 300], key=lambda bx: bx[2])
+digits_order1 = row1 + row2
 
-print(f"✅ Successfully segmented {len(digits_order)} digit components from Trial 1.")
+print(f"✅ Trial 1: Successfully segmented {len(digits_order1)} digit components.")
 
-# Evaluate each digit with the pre-trained benchmark model
+# Plot Trial 1 4x5 Evaluation Gallery
 fig, axes = plt.subplots(4, 5, figsize=(15, 11))
-correct_count = 0
-results_table = []
+correct_count1 = 0
+results_table1 = []
 
-for true_digit, (ymin, ymax, xmin, xmax) in enumerate(digits_order[:10]):
+for true_digit, (ymin, ymax, xmin, xmax) in enumerate(digits_order1[:10]):
     col = true_digit % 5
     row_photo = 0 if true_digit < 5 else 2
     row_8x8 = 1 if true_digit < 5 else 3
     
     pad_raw = 15
     y0 = max(0, ymin - pad_raw)
-    y1 = min(arr_rgb.shape[0], ymax + pad_raw)
+    y1 = min(arr_rgb1.shape[0], ymax + pad_raw)
     x0 = max(0, xmin - pad_raw)
-    x1 = min(arr_rgb.shape[1], xmax + pad_raw)
-    raw_crop = arr_rgb[y0:y1, x0:x1].astype(np.uint8)
+    x1 = min(arr_rgb1.shape[1], xmax + pad_raw)
+    raw_crop = arr_rgb1[y0:y1, x0:x1].astype(np.uint8)
     
     crop_mask = blue_ink_mask[ymin:ymax, xmin:xmax]
     crop_thick = ndi.binary_dilation(crop_mask, iterations=3).astype(np.float32) * 255.0
@@ -269,14 +175,14 @@ for true_digit, (ymin, ymax, xmin, xmax) in enumerate(digits_order[:10]):
     
     is_match = (pred == true_digit)
     if is_match:
-        correct_count += 1
+        correct_count1 += 1
         status_text = "CORRECT"
         status_color = "#2E7D32"
     else:
         status_text = "MISMATCH"
         status_color = "#C62828"
         
-    results_table.append({
+    results_table1.append({
         "True Digit": true_digit,
         "Predicted": pred,
         "Confidence (%)": f"{prob:.1f}%",
@@ -297,8 +203,8 @@ for true_digit, (ymin, ymax, xmin, xmax) in enumerate(digits_order[:10]):
     ax_m.axis('off')
 
 plt.suptitle(
-    f"Real-World Trial 1: Full 10-Digit Evaluation vs. Pre-Trained Benchmark Model\\n"
-    f"Overall Accuracy: {correct_count}/10 ({correct_count*10}%) — Green: Correct | Red: Mismatch",
+    f"Real-World Trial 1: Two-Row Layout ('self.jpeg') vs. Pre-Trained Benchmark Model\\n"
+    f"Accuracy: {correct_count1}/10 ({correct_count1*10}%) — Green: Correct | Red: Mismatch",
     fontsize=14, fontweight='bold', y=0.99
 )
 plt.tight_layout()
@@ -306,21 +212,140 @@ os.makedirs("results/custom_trials/trial_01_phone_lined_paper", exist_ok=True)
 plt.savefig("results/custom_trials/trial_01_phone_lined_paper/self_handwriting_evaluation.png", dpi=150)
 plt.show()
 
-# Display tabular breakdown
-df_results = pd.DataFrame(results_table)
-print("\\n" + "=" * 55)
-print(f"📊 SUMMARY OF TRIAL 1 PERFORMANCE: {correct_count}/10 ({correct_count*10}%)")
-print("=" * 55)
-print(df_results.to_string(index=False))
+print(f"📊 TRIAL 1 ACCURACY: {correct_count1}/10 ({correct_count1*10}%)")
+print(pd.DataFrame(results_table1).to_string(index=False))
 """))
 
-# Cell 13: Markdown Section 6 - Single-Image Testing
-cells.append(nbf.v4.new_markdown_cell("""## 6. Single-Digit Inference on External Samples
+# Cell 7: Markdown Section 3 - Trial 2 Deep Dive
+cells.append(nbf.v4.new_markdown_cell("""## 3. Real-World Trial 2: Single Vertical Column Layout (`sample_02.jpeg`)
+
+In Trial 2, a new handwriting sample was photographed where all 10 digits (`0` through `9`) were written in a **single vertical column** down the page.
+
+### Unique Real-World Properties in Trial 2:
+1. **Vertical Progression**: Digit `0` is at the very top, progressing sequentially down to `9` at the bottom.
+2. **Narrow Aspect Ratio**: The digits are written tall and narrow ($h \\approx 60-80$ px vs. $w \\approx 25-45$ px).
+3. **Horizontal Lined Paper**: Gray/red ruling lines run horizontally across the entire page. We suppress these using morphological grey opening (`ndi.grey_opening` with a horizontal structuring element of size $1 \\times 50$).
+"""))
+
+# Cell 8: Code Trial 2 Preprocessing & Multi-Digit Evaluation
+cells.append(nbf.v4.new_code_cell("""# Load Trial 2 raw image
+TRIAL2_IMG_PATH = "data/custom_trials/trial_02_vertical_column/sample_02.jpeg"
+img2 = Image.open(TRIAL2_IMG_PATH)
+arr_rgb2 = np.array(img2, dtype=np.float32)
+gray2 = np.array(img2.convert('L'), dtype=np.float32)
+
+# Suppress horizontal rule lines and estimate background illumination
+bg2 = ndi.gaussian_filter(gray2, sigma=20)
+diff2 = bg2 - gray2
+line_bg2 = ndi.grey_opening(diff2, size=(1, 50))
+ink_isolated2 = np.clip(diff2 - line_bg2, 0, None)
+
+# Restrict to central handwriting column
+mask2 = np.zeros_like(ink_isolated2, dtype=bool)
+mask2[:, 220:480] = (ink_isolated2[:, 220:480] > 40)
+
+# Segment vertically aligned digits
+dilated2 = ndi.binary_dilation(mask2, iterations=4)
+labeled2, _ = ndi.label(dilated2)
+objects2 = ndi.find_objects(labeled2)
+
+boxes2 = []
+for sl in objects2:
+    h = sl[0].stop - sl[0].start
+    w = sl[1].stop - sl[1].start
+    area = np.sum(mask2[sl])
+    if area > 100 and h > 15:
+        boxes2.append((sl[0].start, sl[0].stop, sl[1].start, sl[1].stop))
+
+# Sort top-to-bottom by Y coordinate
+boxes2 = sorted(boxes2, key=lambda bx: bx[0])
+print(f"✅ Trial 2: Successfully segmented {len(boxes2)} digits in vertical order.")
+
+# Plot Trial 2 4x5 Evaluation Gallery
+fig, axes = plt.subplots(4, 5, figsize=(15, 11))
+correct_count2 = 0
+results_table2 = []
+
+for true_digit, (ymin, ymax, xmin, xmax) in enumerate(boxes2[:10]):
+    col = true_digit % 5
+    row_photo = 0 if true_digit < 5 else 2
+    row_8x8 = 1 if true_digit < 5 else 3
+    
+    pad_raw = 15
+    y0 = max(0, ymin - pad_raw)
+    y1 = min(arr_rgb2.shape[0], ymax + pad_raw)
+    x0 = max(0, xmin - pad_raw)
+    x1 = min(arr_rgb2.shape[1], xmax + pad_raw)
+    raw_crop = arr_rgb2[y0:y1, x0:x1].astype(np.uint8)
+    
+    crop_mask = mask2[ymin:ymax, xmin:xmax]
+    crop_thick = ndi.binary_dilation(crop_mask, iterations=3).astype(np.float32) * 255.0
+    
+    h, w = crop_thick.shape
+    size = max(h, w)
+    pad = int(size * 0.08)
+    tot = size + 2 * pad
+    sq = np.zeros((tot, tot), dtype=np.float32)
+    sq[pad + (size - h) // 2 : pad + (size - h) // 2 + h,
+       pad + (size - w) // 2 : pad + (size - w) // 2 + w] = crop_thick
+    
+    res = Image.fromarray(sq.astype(np.uint8)).resize((8, 8), Image.Resampling.BILINEAR)
+    arr_8 = (np.array(res, dtype=np.float32) / 255.0) * 16.0
+        
+    flat_scaled = scaler.transform(arr_8.reshape(1, -1))
+    pred = model.predict(flat_scaled)[0]
+    prob = model.predict_proba(flat_scaled)[0][pred] * 100
+    
+    is_match = (pred == true_digit)
+    if is_match:
+        correct_count2 += 1
+        status_text = "CORRECT"
+        status_color = "#2E7D32"
+    else:
+        status_text = "MISMATCH"
+        status_color = "#C62828"
+        
+    results_table2.append({
+        "True Digit": true_digit,
+        "Predicted": pred,
+        "Confidence (%)": f"{prob:.1f}%",
+        "Result": status_text
+    })
+    
+    ax_p = axes[row_photo, col]
+    ax_p.imshow(raw_crop)
+    ax_p.set_title(f"True '{true_digit}' (Photo)", fontsize=11, fontweight='bold', pad=4)
+    ax_p.axis('off')
+    
+    ax_m = axes[row_8x8, col]
+    ax_m.imshow(arr_8, cmap=plt.cm.gray_r, interpolation='nearest')
+    ax_m.set_title(
+        f"8x8 ➔ Pred: {pred}\\n[{status_text}] ({prob:.1f}%)",
+        fontsize=10.5, fontweight='bold', color=status_color, pad=4
+    )
+    ax_m.axis('off')
+
+plt.suptitle(
+    f"Real-World Trial 2: Vertical Column Layout ('sample_02.jpeg') vs. Pre-Trained Benchmark Model\\n"
+    f"Accuracy: {correct_count2}/10 ({correct_count2*10}%) — Green: Correct | Red: Mismatch",
+    fontsize=14, fontweight='bold', y=0.99
+)
+plt.tight_layout()
+os.makedirs("results/custom_trials/trial_02_vertical_column", exist_ok=True)
+plt.savefig("results/custom_trials/trial_02_vertical_column/trial_02_evaluation.png", dpi=150)
+plt.show()
+
+print(f"📊 TRIAL 2 ACCURACY: {correct_count2}/10 ({correct_count2*10}%)")
+print(pd.DataFrame(results_table2).to_string(index=False))
+"""))
+
+# Cell 9: Markdown Section 4 - Single-Image Testing
+cells.append(nbf.v4.new_markdown_cell("""## 4. Single-Digit Inference on External Samples
 
 We also provide a general-purpose single-image testing routine. Here we evaluate synthetic test samples (`sample_digit_3.png` and `sample_digit_0.png`) with probability distributions.
 """))
 
-# Cell 14: Code Single-Image Inference
+# Cell 10: Code Single-Image Inference
 cells.append(nbf.v4.new_code_cell("""def predict_and_visualize_custom(image_path):
     assert os.path.exists(image_path), f"File not found: {image_path}"
     img = Image.open(image_path).convert('L')
@@ -377,24 +402,35 @@ predict_and_visualize_custom("data/custom_trials/samples/sample_digit_3.png")
 predict_and_visualize_custom("data/custom_trials/samples/sample_digit_0.png")
 """))
 
-# Cell 15: Markdown Section 7 - Domain Shift Takeaways
-cells.append(nbf.v4.new_markdown_cell("""## 7. The Reality Gap: Domain Shift Insights & Takeaways
+# Cell 11: Markdown Section 5 - Cross-Trial Comparison
+cells.append(nbf.v4.new_markdown_cell("""## 5. Cross-Trial Synthesis: The Domain Shift Spectrum
 
-### Why Did Accuracy Drop from 99.17% to 50.0%?
-
-| Benchmark World (Ideal NIST) | Real-World Trial 1 (`self.jpeg`) |
-| :--- | :--- |
-| **Controlled 8x8 Bitmaps**: Pre-scanned, pre-centered, calibrated grayscale values. | **Camera & Optical Distortion**: Lens perspective, uneven page lighting, paper shadows. |
-| **Pure Background**: Background is uniformly numerical zero ($0.0$). | **Complex Canvas**: Cream paper with red notebook ruling lines cutting through digits. |
-| **Uniform Thick Strokes**: Digits have standardized stroke widths relative to an $8 \\times 8$ grid. | **Thin Ballpoint Pen**: 1–2 px stroke collapses during $8 \\times 8$ downsampling. |
-| **Clean Internal Topology**: Internal loops of `6`, `8`, and `9` are distinct open regions. | **Collapsing Features**: Loops and crosses collapse into vertical lines, predicting `1` or `4`. |
+### Comparative Performance Breakdown:
+| Experiment | Input Modality / Dataset | Writing Medium / Layout | Test Accuracy |
+| :--- | :--- | :--- | :---: |
+| **Laboratory Baseline** | Scikit-Learn Digits ($8 \\times 8$) | NIST standard digitizer / Pre-centered | **99.17%** |
+| **Real-World Trial 1** | Smartphone photo (`self.jpeg`) | Blue ballpoint pen, 2 horizontal rows | **50.0%** |
+| **Real-World Trial 2** | Smartphone photo (`sample_02.jpeg`) | Black/blue pen, single vertical column | **20.0%** |
 
 ---
 
-### What Did We Learn?
-1. **Lab Accuracies Are Deceptive**: A model with 99.17% test accuracy on held-out benchmark splits can easily degrade to 50% when exposed to uncurated real-world conditions.
-2. **Preprocessing is Half the Model**: Without color-space ink filtering `(b - r) > 10` and morphological dilation, the model would achieve 0% accuracy due to notebook line noise.
-3. **Resolution Bottleneck**: An $8 \\times 8$ resolution (64 features) is sufficient for lab-standardized digits, but too coarse for varied human handwriting. Modern real-world digit recognition requires at least $28 \\times 28$ (MNIST) or deep convolutional neural networks (CNNs).
+### Why Did Trial 2 Score 20% Compared to Trial 1's 50%?
+1. **Aspect Ratio Compression (The Tall/Narrow Effect)**:
+   - In Trial 2, the writer drew narrow, elongated digits (height $\\approx 2\\times$ width).
+   - When padded into a square aspect-ratio box, the character only occupies 2–3 columns in the center of the $8 \\times 8$ grid.
+   - In the Scikit-Learn dataset, characters occupy almost the entire 8x8 space. A tall, thin stroke directly mimics vertical features, causing strong prediction bias toward **class `4` and class `1`**.
+2. **Stroke Slant & Style Variation**:
+   - Digit `0` in Trial 2 is tilted at a diagonal angle (`/`), which the RBF SVM kernel does not recognize as a centered loop `0`.
+   - Digit `4` is written as an open vertical stem resembling a `9`.
+3. **Resolution Bottleneck**:
+   - Compressing a full smartphone photo down to an $8 \\times 8$ bitmap (64 numbers total!) strips away the fine spatial curvatures needed to separate complex handwritings.
+
+---
+
+### Practical Engineering Lessons for Real-World Deployment:
+* **Lesson 1: Controlled Normalization**: Centering, aspect-ratio scaling, and stroke dilation are just as critical as the ML model itself.
+* **Lesson 2: Higher Input Resolution**: Real-world handwriting requires at least $28 \\times 28$ (MNIST standard) or modern CNN / Vision Transformer architectures to capture nuanced character curves.
+* **Lesson 3: Training on Varied Data**: A model trained solely on clean laboratory benchmarks will inevitably suffer domain collapse when deployed on raw mobile phone images.
 """))
 
 nb.cells = cells
@@ -413,4 +449,4 @@ client.execute()
 with open(notebook_path, "w", encoding="utf-8") as f:
     nbf.write(nb, f)
 
-print("[SUCCESS] custom_handwritten_trials.ipynb successfully generated and fully executed with all outputs!")
+print("[SUCCESS] custom_handwritten_trials.ipynb successfully updated and fully executed with both Trial 1 and Trial 2!")
