@@ -41,24 +41,29 @@ In machine learning research, controlled datasets often report >99% test accurac
 
 ---
 
-## 🔬 The Reality Gap: Benchmark vs. Real-World Domain Shift (Trial 1)
+## 🔬 The Reality Gap: Benchmark vs. Real-World Domain Shift (Trials 1 & 2)
 
-| Dimension | Ideal Benchmark (Scikit-Learn) | Real-World Trial 1 (`self.jpeg`) |
-| :--- | :--- | :--- |
-| **Source Image** | Digitized, pre-centered $8 \times 8$ bitmaps | High-res smartphone photo ($4000 \times 3000$ px) |
-| **Writing Tool** | NIST standardization (thick uniform strokes) | Thin blue ballpoint pen (~1–2 px stroke) |
-| **Canvas / Background**| Uniform solid dark background (value 0) | Cream paper with red notebook ruling lines |
-| **Preprocessing** | None required (pre-extracted features) | RGB color thresholding + Morphological Dilation |
-| **Model Test Accuracy** | **99.17% (357 / 360 correct)** | **50.0% (5 / 10 correct)** |
+| Dimension | Ideal Benchmark (Scikit-Learn) | Real-World Trial 1 (`self.jpeg`) | Real-World Trial 2 (`sample_02.jpeg`) |
+| :--- | :--- | :--- | :--- |
+| **Source Image** | Digitized, pre-centered $8 \times 8$ bitmaps | High-res photo ($4000 \times 3000$ px) | Smartphone photo ($1280 \times 720$ px) |
+| **Writing Tool** | NIST standardization (thick uniform strokes) | Blue ballpoint pen (~1–2 px stroke) | Black/blue pen (~1–2 px stroke) |
+| **Layout** | Pre-isolated individual characters | Horizontal 2-row layout | Single **vertical column** (0 down to 9) |
+| **Canvas / Background**| Uniform solid dark background (value 0) | Cream paper with red notebook lines | Gray-lined notebook paper with lighting gradient |
+| **Preprocessing** | None required (pre-extracted features) | Blue-ink difference thresholding | Morphological grey opening line suppression |
+| **Model Test Accuracy** | **99.17% (357 / 360 correct)** | **50.0% (5 / 10 correct)** | **20.0% (2 / 10 correct)** |
 
-### 🔍 Key Findings from Trial 1:
-1. **Rule Line Noise Elimination**: Naive grayscale conversion fails because horizontal notebook lines merge with the digits. Utilizing color difference filtering (`(b - r) > 10` & `(r+g+b)/3 < 160`) isolates blue ballpoint ink while completely rejecting red rule lines.
-2. **Stroke Thickness Discrepancy**: NIST/Scikit-Learn digits have thick strokes relative to an $8 \times 8$ grid. A thin ballpoint pen line thins out or breaks when downsampled to $8 \times 8$. Applying 3 iterations of **morphological dilation** was critical to preserve character topology.
-3. **Per-Digit Evaluation on `self.jpeg`**:
-   - **Correctly Classified (5/10)**: `0`, `1`, `2`, `3`, `7` (digits with simple strokes or distinct closed contours).
-   - **Misclassified (5/10)**: `4`, `5`, `6`, `8`, `9` (digits whose internal loops and crosses collapsed into vertical strokes under $8 \times 8$ compression, leading to biased predictions toward classes `1` and `4`).
+### 🔍 Key Findings from the Real-World Trials:
+1. **Trial 1 (50% Accuracy - 2-Row Layout)**:
+   - **Correctly Classified (5/10)**: `0`, `1`, `2`, `3`, `7`.
+   - **Misclassified (5/10)**: `4`, `5`, `6`, `8`, `9`.
+   - Blue-ink difference filtering `(b - r) > 10` eliminated red notebook lines, and morphological dilation thickened strokes.
+2. **Trial 2 (20% Accuracy - Vertical Column Layout)**:
+   - **Correctly Classified (2/10)**: `1`, `7`.
+   - **Misclassified (8/10)**: `0`, `2`, `3`, `4`, `5`, `6`, `8`, `9`.
+   - **The Tall/Narrow Aspect Ratio Bottleneck**: In Trial 2, digits are written tall and narrow ($h \approx 2 \times w$). When padded into a square canvas, the digit occupies only 2–3 columns in the center of the $8 \times 8$ grid. This creates an overwhelming feature bias toward **class `4`** (predicted for 0, 2, 5, 6) and **class `1`** (predicted for 8, 9).
 
 ![Trial 1 Evaluation](results/custom_trials/trial_01_phone_lined_paper/self_handwriting_evaluation.png)
+![Trial 2 Evaluation](results/custom_trials/trial_02_vertical_column/trial_02_evaluation.png)
 
 ---
 
@@ -83,7 +88,7 @@ Evaluated using 5-Fold Stratified Cross-Validation and held-out test splits:
 ```
 Hand-Digit-Recognition/
 ├── handwritten_digit_recognition.ipynb  # Notebook 1: Ideal Benchmark (Scikit-Learn & UCI PenDigits)
-├── custom_handwritten_trials.ipynb      # Notebook 2: Real-World Custom Trials (Evaluates self.jpeg & samples)
+├── custom_handwritten_trials.ipynb      # Notebook 2: Real-World Custom Trials (Evaluates Trials 1 & 2)
 ├── requirements.txt                     # Project dependencies
 ├── README.md                            # Comprehensive documentation & findings
 ├── LICENSE                              # MIT License
@@ -96,7 +101,8 @@ Hand-Digit-Recognition/
 │   │   ├── zip/                         # Archived dataset source archives
 │   │   └── references/                  # Dataset reference URLs & documentation
 │   └── custom_trials/                   # Real-world and external test inputs
-│       ├── trial_01_phone_lined_paper/  # self.jpeg (user phone camera handwriting)
+│       ├── trial_01_phone_lined_paper/  # self.jpeg (horizontal 2-row layout)
+│       ├── trial_02_vertical_column/    # sample_02.jpeg (single vertical column layout)
 │       └── samples/                     # Synthetic test sample digits
 │
 ├── results/                             # Categorized analytical outputs & charts
@@ -108,12 +114,14 @@ Hand-Digit-Recognition/
 │   │   ├── pca_tsne_projections.png
 │   │   └── pen_trajectories.png
 │   └── custom_trials/                   # Custom trial diagnostics
-│       ├── trial_01_phone_lined_paper/  # self_handwriting_evaluation.png (10-digit grid)
+│       ├── trial_01_phone_lined_paper/  # self_handwriting_evaluation.png
+│       ├── trial_02_vertical_column/    # trial_02_evaluation.png
 │       └── samples/                     # custom_prediction_sample_digit_3.png
 │
 ├── scripts/                             # Executable Python workflows
 │   ├── run_benchmark.py                 # Full benchmark training & evaluation suite
 │   ├── evaluate_trial_1.py              # Real-world Trial 1 multi-digit evaluator
+│   ├── evaluate_trial_2.py              # Real-world Trial 2 vertical column evaluator
 │   ├── predict_single_image.py          # Single image inference CLI tool
 │   ├── generate_notebook.py             # Benchmark notebook generator & executor
 │   └── generate_trials_notebook.py      # Custom trials notebook generator & executor
@@ -141,13 +149,20 @@ python scripts/run_benchmark.py
 ```
 
 ### 3. Evaluate Real-World Custom Trial 1 (`self.jpeg`)
-Run the color space segmentation, morphological dilation, and multi-digit evaluation on the phone-captured lined paper:
+Run evaluation on the phone-captured 2-row lined paper:
 ```bash
 python scripts/evaluate_trial_1.py
 ```
 This produces `results/custom_trials/trial_01_phone_lined_paper/self_handwriting_evaluation.png`.
 
-### 4. Test Any Arbitrary Single Image
+### 4. Evaluate Real-World Custom Trial 2 (`sample_02.jpeg`)
+Run evaluation on the phone-captured vertical column lined paper:
+```bash
+python scripts/evaluate_trial_2.py
+```
+This produces `results/custom_trials/trial_02_vertical_column/trial_02_evaluation.png`.
+
+### 5. Test Any Arbitrary Single Image
 Test inference on an individual handwritten digit image with automatic centering and polarity detection:
 ```bash
 python scripts/predict_single_image.py data/custom_trials/samples/sample_digit_3.png
@@ -157,18 +172,16 @@ Or provide any custom `.png` / `.jpg` path:
 python scripts/predict_single_image.py path/to/your/digit.png
 ```
 
-### 5. Interactive Jupyter Notebooks
+### 6. Interactive Jupyter Notebooks
 You have two pre-executed interactive notebooks at the repository root:
 * **Notebook 1: Benchmark Baseline (`handwritten_digit_recognition.ipynb`)**
   ```bash
   jupyter notebook handwritten_digit_recognition.ipynb
   ```
-  Trains the models from scratch on Scikit-Learn Digits and UCI PenDigits.
 * **Notebook 2: Real-World Custom Trials (`custom_handwritten_trials.ipynb`)**
   ```bash
   jupyter notebook custom_handwritten_trials.ipynb
   ```
-  Loads the pre-trained benchmark model from `models/` and performs the complete computer vision preprocessing, segmentation, and evaluation on `self.jpeg` and custom test samples.
 
 
 ---
